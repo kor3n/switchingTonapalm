@@ -1,12 +1,17 @@
-import napalm, paramiko, netmiko, getpass
+import napalm, paramiko, netmiko, getpass, sqlite3, csv
+
 driverios = napalm.get_network_driver('ios')
+
+currentSwitch = []
 
 def switchLogin(ip, u, p):
 	global device
 	try:
 		device = driverios(hostname=ip, username=u, password=p, optional_args={'secret': p})
 		device.open()
-		print('\n[+] - Connection Open\n')
+		print('\n[+] - Connection Open ({})\n'.format(ip))
+		currentSwitch.append(u)
+		currentSwitch.append(ip)
 		return True
 	except paramiko.AuthenticationException as auth:
 		print('Incorrect Username / Password')
@@ -26,24 +31,47 @@ def switchDetails():
 	print('-'*40)
 	print('Hostname: {}\nSerial Number: {}\nOS Version: {}'.format(hostname, serialNumber, osVersion))
 	print('-'*40)
+	currentSwitch.append(hostname)
+	currentSwitch.append(serialNumber)
+	currentSwitch.append(osVersion)
 
 def switchinterfaces():
 	print('-'*40)
 	interfaces = device.get_interfaces()
 	for e in interfaces:
 		if interfaces.get(e, '')['is_enabled'] == True and interfaces.get(e, '')['is_up'] == True:
-			print("Interface: {} - {}".format(e, 'Enabled and connected'))
+			msg = "{} - {}".format(e, 'Enabled and Connected')
+			print('Interface: {}'.format(msg))
+			currentSwitch.append(msg)
 		elif interfaces.get(e, '')['is_enabled'] == True and interfaces.get(e, '')['is_up'] == False:
-			print("Interface: {} - {}".format(e, 'Enabled and Disconnected'))
+			msg = "{} - {}".format(e, 'Enabled and Disconnected')
+			print('Interface: {}'.format(msg))
+			currentSwitch.append(msg)
 		elif interfaces.get(e, '')['is_enabled'] == False:
-			print("Interface: {} - {}".format(e, 'Disabled'))
+			msg = "{} - {}".format(e, 'Disabled')
+			print('Interface: {}'.format(msg))
+			currentSwitch.append(msg)
 	print('-'*40)
 
+def outputCSVfile(details):
+	global currentSwitch
+	with open('output.csv', 'a', newline='') as csvfile:
+		csvWriter = csv.writer(csvfile)
+		csvWriter.writerow(details)
+	currentSwitch = []
+
 def main():
+	try:
+		with open('iplist.conf', 'r') as f:
+			l = f.read().splitlines()
+	except Exception as e:
+		raise
+
 	uname = input('Username: ')
 	pword = getpass.getpass(prompt='Password: ')
 	## impliment somekind of mass ip to list - ipList
-	ipList = ['192.168.1.1', '192.168.0.1']
+
+	ipList = l
 	for ip in ipList:
 		while True:
 			if switchLogin(ip, uname, pword) == True:
@@ -54,6 +82,7 @@ def main():
 		switchDetails()
 		switchinterfaces()
 		switchClose()
+		outputCSVfile(currentSwitch)
 
 if __name__ == '__main__':
 	main()
